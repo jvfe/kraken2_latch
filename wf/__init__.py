@@ -30,7 +30,14 @@ def create_kraken2_database() -> LatchDir:
     database_name = "standard_kraken_db"
     database_dir = Path(database_name).resolve()
 
-    _krakenbuild_cmd = ["kraken2-build", "--standard", "--db", str(database_dir)]
+    _krakenbuild_cmd = [
+        "kraken2-build",
+        "--standard",
+        "--threads",
+        "96",
+        "--db",
+        str(database_dir),
+    ]
 
     subprocess.run(_krakenbuild_cmd, check=True)
 
@@ -65,6 +72,8 @@ def run_kraken2(
 
     _kraken2_cmd = [
         "kraken2",
+        "--threads",
+        "96",
         "-db",
         sample.database.local_path,
         "--paired",
