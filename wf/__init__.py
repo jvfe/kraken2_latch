@@ -1,7 +1,7 @@
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 from dataclasses_json import dataclass_json
 from latch import large_task, map_task, message, small_task, workflow
@@ -66,7 +66,21 @@ def run_kraken2(
     ]
 
     with open(kraken_out, "w") as f:
-        subprocess.call(_kraken2_cmd, stdout=f)
+        message(
+            "info",
+            {"title": f"Running Kraken2 for sample ID {sample.data.sample_name}"},
+        )
+
+        try:
+            subprocess.call(_kraken2_cmd, stdout=f)
+        except Exception:
+            message(
+                "error",
+                {
+                    "title": "An error occurred while running Kraken2",
+                    "body": "Check the validity of the input files and the task logs",
+                },
+            )
 
     return LatchDir(str(output_dir), f"latch:///kraken2/{output_dir_name}")
 
