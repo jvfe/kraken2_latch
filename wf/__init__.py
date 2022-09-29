@@ -8,6 +8,8 @@ from latch import large_task, map_task, message, small_task, workflow
 from latch.resources.launch_plan import LaunchPlan
 from latch.types import LatchDir, LatchFile
 
+from .docs import metadata
+
 
 @dataclass_json
 @dataclass
@@ -22,26 +24,6 @@ class Sample:
 class KrakenSample:
     data: Sample
     database: LatchDir
-
-
-@large_task
-def create_kraken2_database() -> LatchDir:
-
-    database_name = "standard_kraken_db"
-    database_dir = Path(database_name).resolve()
-
-    _krakenbuild_cmd = [
-        "kraken2-build",
-        "--standard",
-        "--threads",
-        "96",
-        "--db",
-        str(database_dir),
-    ]
-
-    subprocess.run(_krakenbuild_cmd, check=True)
-
-    return LatchDir(str(database_dir), "latch:///kraken2/standard_kraken_db")
 
 
 @small_task
@@ -86,11 +68,11 @@ def run_kraken2(
     with open(kraken_out, "w") as f:
         subprocess.call(_kraken2_cmd, stdout=f)
 
-    return (LatchDir(str(output_dir), f"latch:///kraken2/{output_dir_name}"),)
+    return LatchDir(str(output_dir), f"latch:///kraken2/{output_dir_name}")
 
 
-@workflow
-def kraken2(samples: List[Sample]) -> List[LatchDir]:
+@workflow(metadata)
+def kraken2(samples: List[Sample], kraken_database: LatchDir) -> List[LatchDir]:
     """Taxonomic sequence classification with Kraken2
 
     Kraken2
@@ -106,7 +88,6 @@ def kraken2(samples: List[Sample]) -> List[LatchDir]:
     [^1]: Wood, D.E., Lu, J. & Langmead, B. Improved metagenomic analysis with Kraken 2.
     Genome Biol 20, 257 (2019). https://doi.org/10.1186/s13059-019-1891-0
     """
-    kraken_database = create_kraken2_database()
 
     kraken_inputs = create_kraken2_inputs(samples=samples, database=kraken_database)
 
@@ -129,5 +110,6 @@ LaunchPlan(
                 read2=LatchFile("s3://latch-public/test-data/4318/SRR579292_2.fastq"),
             ),
         ],
+        "kraken_database": "latch:///kraken2/standard_kraken_db/",
     },
 )

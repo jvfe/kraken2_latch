@@ -19,4 +19,8 @@ metadata.parameters = {
         batch_table_column=True,
         section_title="Data",
     ),
+    "kraken_database": LatchParameter(
+        display_name="Kraken2 database",
+        description="A database created with the kraken-build command",
+    )
 }
