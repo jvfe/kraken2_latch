@@ -124,6 +124,6 @@ LaunchPlan(
                 read2=LatchFile("s3://latch-public/test-data/4318/SRR579292_2.fastq"),
             ),
         ],
-        "kraken_database": "latch:///kraken2/standard_kraken_db/",
+        "kraken_database": "s3://latch-public/test-data/4318/standard_kraken_db/",
     },
 )
