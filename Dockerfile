@@ -1,6 +1,6 @@
 FROM 812206152185.dkr.ecr.us-west-2.amazonaws.com/latch-base:6839-main
 
-RUN apt-get install -y curl unzip
+RUN apt-get update -y && apt-get install -y curl unzip
 RUN apt-get update -y
 RUN apt-get install -y rsync
 
@@ -19,6 +19,9 @@ RUN mamba install -c bioconda -y kraken2
 # Fix Kraken2 download script
 RUN sed -i 's/ftp:/https:/' /opt/conda/libexec/rsync_from_ncbi.pl
 RUN sed -i 's/for subsection in est gb gss wgs/for subsection in gb wgs/' /opt/conda/libexec/download_taxonomy.sh
+
+# Install MicroView
+RUN python3 -m pip install microview==0.9.4
 
 # STOP HERE:
 # The following lines are needed to ensure your build environement works

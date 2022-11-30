@@ -1,10 +1,11 @@
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
 from dataclasses_json import dataclass_json
-from latch import large_task, map_task, message, small_task, workflow
+from latch import large_task, map_task, small_task, workflow
 from latch.resources.launch_plan import LaunchPlan
 from latch.types import LatchDir, LatchFile
 
@@ -66,27 +67,34 @@ def run_kraken2(
     ]
 
     with open(kraken_out, "w") as f:
-        message(
-            "info",
-            {"title": f"Running Kraken2 for sample ID {sample.data.sample_name}"},
-        )
-
-        try:
-            subprocess.call(_kraken2_cmd, stdout=f)
-        except Exception:
-            message(
-                "error",
-                {
-                    "title": "An error occurred while running Kraken2",
-                    "body": "Check the validity of the input files and the task logs",
-                },
-            )
+        subprocess.call(_kraken2_cmd, stdout=f)
 
     return LatchDir(str(output_dir), f"latch:///kraken2/{output_dir_name}")
 
 
+@small_task
+def run_microview(kraken_results: List[LatchDir]) -> LatchFile:
+
+    result_directories = [Path(res.local_path) for res in kraken_results]
+
+    # TODO: This is ugly, improve this
+    tsvs = [list(d.glob("*tsv"))[0].resolve() for d in result_directories]
+
+    tsv_only_dir = Path("tsv_only").mkdir(exist_ok=True).resolve()
+
+    _ = [shutil.copy2(src, tsv_only_dir) for src in tsvs]
+
+    microview_report = Path("microview_report.html").resolve()
+
+    _microview_cmd = ["microview", "-t", str(tsv_only_dir), "-o", str(microview_report)]
+
+    subprocess.run(_microview_cmd, check=True)
+
+    return LatchFile(str(microview_report), "latch:///kraken2/microview_report.html")
+
+
 @workflow(metadata)
-def kraken2(samples: List[Sample], kraken_database: LatchDir) -> List[LatchDir]:
+def kraken2(samples: List[Sample], kraken_database: LatchDir) -> LatchFile:
     """Taxonomic sequence classification with Kraken2
 
     Kraken2
@@ -105,7 +113,9 @@ def kraken2(samples: List[Sample], kraken_database: LatchDir) -> List[LatchDir]:
 
     kraken_inputs = create_kraken2_inputs(samples=samples, database=kraken_database)
 
-    return map_task(run_kraken2)(sample=kraken_inputs)
+    kraken_results = map_task(run_kraken2)(sample=kraken_inputs)
+
+    return run_microview(kraken_results=kraken_results)
 
 
 LaunchPlan(
