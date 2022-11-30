@@ -80,7 +80,8 @@ def run_microview(kraken_results: List[LatchDir]) -> LatchFile:
     # TODO: This is ugly, improve this
     tsvs = [list(d.glob("*tsv"))[0].resolve() for d in result_directories]
 
-    tsv_only_dir = Path("tsv_only").mkdir(exist_ok=True).resolve()
+    tsv_only_dir = Path("tsv_only").resolve()
+    tsv_only_dir.mkdir(exist_ok=True)
 
     _ = [shutil.copy2(src, tsv_only_dir) for src in tsvs]
 
