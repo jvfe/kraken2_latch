@@ -21,7 +21,7 @@ RUN sed -i 's/ftp:/https:/' /opt/conda/libexec/rsync_from_ncbi.pl
 RUN sed -i 's/for subsection in est gb gss wgs/for subsection in gb wgs/' /opt/conda/libexec/download_taxonomy.sh
 
 # Install MicroView
-RUN python3 -m pip install microview==0.9.4
+RUN python3 -m pip install microview==0.9.5
 
 # STOP HERE:
 # The following lines are needed to ensure your build environement works
