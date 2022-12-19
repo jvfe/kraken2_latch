@@ -27,6 +27,14 @@ class KrakenSample:
     database: LatchDir
 
 
+@dataclass_json
+@dataclass
+class BrackenSample:
+    sample_name: str
+    kraken_result: LatchDir
+    database: LatchDir
+
+
 @small_task
 def create_kraken2_inputs(
     samples: List[Sample], database: LatchDir
@@ -37,20 +45,21 @@ def create_kraken2_inputs(
 @large_task
 def run_kraken2(
     sample: KrakenSample,
-) -> LatchDir:
+) -> BrackenSample:
     """Classify metagenomic reads with Kraken2
 
     Returns a tuple, first being the kraken2 file and second being the kraken report
     """
     # A reference to our output.
-    output_dir_name = f"{sample.data.sample_name}_results/"
+    sample_name = sample.data.sample_name
+    output_dir_name = f"{sample_name}_results/"
     output_dir = Path(output_dir_name).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_name = f"{output_dir_name}{sample.data.sample_name}.kraken2"
+    output_name = f"{output_dir_name}{sample_name}.kraken2"
     kraken_out = Path(output_name).resolve()
 
-    report_outname = f"{output_dir_name}{sample.data.sample_name}.tsv"
+    report_outname = f"{output_dir_name}{sample_name}.tsv"
     report_out = Path(report_outname).resolve()
 
     _kraken2_cmd = [
@@ -69,33 +78,43 @@ def run_kraken2(
     with open(kraken_out, "w") as f:
         subprocess.call(_kraken2_cmd, stdout=f)
 
-    return LatchDir(str(output_dir), f"latch:///kraken2/{output_dir_name}")
+    return BrackenSample(
+        sample_name=sample_name,
+        kraken_result=LatchDir(str(output_dir), f"latch:///kraken2/{output_dir_name}"),
+        database=sample.database,
+    )
 
 
-@small_task
-def run_microview(kraken_results: List[LatchDir]) -> LatchFile:
+@large_task
+def run_bracken(sample: BrackenSample) -> LatchFile:
 
-    result_directories = [Path(res.local_path) for res in kraken_results]
+    kraken_report = Path(
+        sample.kraken_result.local_path, f"{sample.sample_name}.tsv"
+    ).resolve()
 
-    # TODO: This is ugly, improve this
-    tsvs = [list(d.glob("*tsv"))[0].resolve() for d in result_directories]
+    output_dir_name = f"{sample.sample_name}_results/"
+    output_name = f"{sample.sample_name}_bracken.tsv"
+    output_path = Path(output_name).resolve()
 
-    tsv_only_dir = Path("tsv_only").resolve()
-    tsv_only_dir.mkdir(exist_ok=True)
+    remote_output = output_dir_name + output_name
 
-    _ = [shutil.copy2(src, tsv_only_dir) for src in tsvs]
+    _bracken_cmd = [
+        "/root/Bracken-2.8/bracken",
+        "-d",
+        sample.database.local_path,
+        "-i",
+        str(kraken_report),
+        "-o",
+        str(output_path),
+    ]
 
-    microview_report = Path("microview_report.html").resolve()
+    subprocess.run(_bracken_cmd, check=True)
 
-    _microview_cmd = ["microview", "-t", str(tsv_only_dir), "-o", str(microview_report)]
-
-    subprocess.run(_microview_cmd, check=True)
-
-    return LatchFile(str(microview_report), "latch:///kraken2/microview_report.html")
+    return LatchFile(str(output_path), f"latch:///kraken2/{remote_output}")
 
 
 @workflow(metadata)
-def kraken2(samples: List[Sample], kraken_database: LatchDir) -> LatchFile:
+def kraken2(samples: List[Sample], kraken_database: LatchDir) -> List[LatchFile]:
     """Taxonomic sequence classification with Kraken2
 
     Kraken2
@@ -116,7 +135,9 @@ def kraken2(samples: List[Sample], kraken_database: LatchDir) -> LatchFile:
 
     kraken_results = map_task(run_kraken2)(sample=kraken_inputs)
 
-    return run_microview(kraken_results=kraken_results)
+    bracken_results = map_task(run_bracken)(sample=kraken_results)
+
+    return bracken_results
 
 
 LaunchPlan(
@@ -135,6 +156,8 @@ LaunchPlan(
                 read2=LatchFile("s3://latch-public/test-data/4318/SRR579292_2.fastq"),
             ),
         ],
-        "kraken_database": "s3://latch-public/test-data/4318/standard_kraken_db/",
+        "kraken_database": LatchDir(
+            "s3://latch-public/test-data/4318/standard_kraken_db/"
+        ),
     },
 )
