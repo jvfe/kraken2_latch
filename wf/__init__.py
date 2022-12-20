@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import List
 
@@ -10,6 +11,26 @@ from latch.resources.launch_plan import LaunchPlan
 from latch.types import LatchDir, LatchFile
 
 from .docs import metadata
+
+
+class ReadLength(Enum):
+    _50 = "50"
+    _75 = "75"
+    _100 = "100"
+    _150 = "150"
+    _200 = "200"
+    _250 = "250"
+    _300 = "300"
+
+
+class ClassificationLevel(Enum):
+    domain = "D"
+    phylum = "P"
+    _class = "C"
+    order = "O"
+    family = "F"
+    genus = "G"
+    species = "S"
 
 
 @dataclass_json
@@ -25,6 +46,9 @@ class Sample:
 class KrakenSample:
     data: Sample
     database: LatchDir
+    read_length: str
+    classification_level: str
+    threshold: int
 
 
 @dataclass_json
@@ -33,13 +57,29 @@ class BrackenSample:
     sample_name: str
     kraken_result: LatchDir
     database: LatchDir
+    read_length: str
+    classification_level: str
+    threshold: int
 
 
 @small_task
 def create_kraken2_inputs(
-    samples: List[Sample], database: LatchDir
+    samples: List[Sample],
+    database: LatchDir,
+    read_length: ReadLength,
+    classification_level: ClassificationLevel,
+    threshold: int,
 ) -> List[KrakenSample]:
-    return [KrakenSample(data=sample, database=database) for sample in samples]
+    return [
+        KrakenSample(
+            data=sample,
+            database=database,
+            read_length=read_length.value,
+            classification_level=classification_level.value,
+            threshold=threshold,
+        )
+        for sample in samples
+    ]
 
 
 @large_task
@@ -82,6 +122,9 @@ def run_kraken2(
         sample_name=sample_name,
         kraken_result=LatchDir(str(output_dir), f"latch:///kraken2/{output_dir_name}"),
         database=sample.database,
+        read_length=sample.read_length,
+        classification_level=sample.classification_level,
+        threshold=sample.threshold,
     )
 
 
@@ -106,6 +149,12 @@ def run_bracken(sample: BrackenSample) -> LatchFile:
         str(kraken_report),
         "-o",
         str(output_path),
+        "-r",
+        sample.read_length,
+        "-l",
+        sample.classification_level,
+        "-t",
+        str(sample.threshold),
     ]
 
     subprocess.run(_bracken_cmd, check=True)
@@ -114,7 +163,13 @@ def run_bracken(sample: BrackenSample) -> LatchFile:
 
 
 @workflow(metadata)
-def kraken2(samples: List[Sample], kraken_database: LatchDir) -> List[LatchFile]:
+def kraken2(
+    samples: List[Sample],
+    kraken_database: LatchDir,
+    read_length: ReadLength = ReadLength._100,
+    classification_level: ClassificationLevel = ClassificationLevel.species,
+    threshold: int = 10,
+) -> List[LatchFile]:
     """Taxonomic sequence classification with Kraken2
 
     Kraken2
@@ -131,7 +186,13 @@ def kraken2(samples: List[Sample], kraken_database: LatchDir) -> List[LatchFile]
     Genome Biol 20, 257 (2019). https://doi.org/10.1186/s13059-019-1891-0
     """
 
-    kraken_inputs = create_kraken2_inputs(samples=samples, database=kraken_database)
+    kraken_inputs = create_kraken2_inputs(
+        samples=samples,
+        database=kraken_database,
+        read_length=read_length,
+        classification_level=classification_level,
+        threshold=threshold,
+    )
 
     kraken_results = map_task(run_kraken2)(sample=kraken_inputs)
 
